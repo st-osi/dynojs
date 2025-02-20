@@ -1,0 +1,2 @@
+# dynojs
+Dynamodb helper library 
