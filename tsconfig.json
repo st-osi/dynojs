@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "es2020", // Or a suitable target for Node.js
+    "module": "commonjs", // Use CommonJS modules
+    "lib": ["es2020", "es5"], // Include necessary library files
+    "outDir": "dist", // Output directory for compiled files
+    "declaration": true, // Generate .d.ts declaration files
+    "declarationDir": "dist", // Put the declarations in the same dist folder
+    "strict": true, // Enable strict type checking
+    "esModuleInterop": true, // Improves compatibility with CommonJS modules
+    "skipLibCheck": true, // Skip type checking of declaration files
+    "forceConsistentCasingInFileNames": true, // Enforce consistent casing
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "test"]
+}
