@@ -40,10 +40,4 @@ export default defineConfig({
       },
     }),
   ],
-  test: {
-    include: ["test/**/*.test.ts"], // Adjust if your tests are in a different location
-    coverage: {
-      reporter: ["text", "lcov", "clover", "json"],
-    },
-  },
 });

@@ -1,15 +1,16 @@
 import { Table } from "@/table/table";
+import { ZodSchema } from "zod";
 
-// we will have entity class here
-interface EntityConstructor {
+export interface EntityConstructor {
   name: string;
   table: Table;
-  pk: string;
-  sk: string;
-  indexes?: {
-    [key: string]: string;
-  };
+  schema: ZodSchema; // TODO: Need to add support for keys
 }
+
 export class Entity {
+  private entityPrefix = "_et";
   constructor(private entityConstructor: EntityConstructor) {}
+  get() {
+    return this.entityConstructor;
+  }
 }

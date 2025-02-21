@@ -1,12 +1,12 @@
-import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import type { ZodUnion, ZodString, ZodNumber, ZodSchema } from "zod";
+import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import type { ZodString, ZodNumber } from "zod";
 
 export interface TableConstructor {
   name: string;
   documentClient: DynamoDBDocumentClient;
   pk: {
     name: string;
-    type: ZodString | ZodNumber;
+    type: ZodString | ZodNumber; //Todo: Need to support binary key
   };
 }
 
