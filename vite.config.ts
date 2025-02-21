@@ -14,10 +14,13 @@ export default defineConfig({
       // Ensure that external packages are not bundled into your library
       external: [], // Add any external dependencies here
       output: {
-        entryFileNames:(ch)=> `[name].[format].js`,
+        entryFileNames: `[name].[format].js`,
         chunkFileNames: "[name]-[hash].[format].js",
         format: "cjs",
         exports: "named",
+        dir: "dist",
+        preserveModules: true,
+        preserveModulesRoot: "src",
       },
     },
     sourcemap: true,
