@@ -1,0 +1,277 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Query Builder and Operations
+
+## Query Builder Interface
+1. Type-safe operations using Zod schemas
+2. Support chainable methods
+3. DynamoDB-specific optimizations
+
+## Core Operations
+1. Get Item
+   ```typescript
+   // Type-safe get operation
+   const user = await UserEntity.get({
+     pk: 'USER#123',
+     sk: 'METADATA'
+   });
+   // user is typed as z.infer<typeof userSchema>
+   ```
+
+2. Put Item
+   ```typescript
+   // Type-safe put operation
+   const result = await UserEntity.put({
+     pk: 'USER#123',
+     sk: 'METADATA',
+     type: 'USER',
+     name: 'John',
+     email: 'john@example.com'
+   });
+   ```
+
+3. Update Item
+   ```typescript
+   // Type-safe update operation
+   const result = await UserEntity.update({
+     key: {
+       pk: 'USER#123',
+       sk: 'METADATA'
+     },
+     set: {
+       name: 'John Updated'
+     },
+     add: {
+       age: 1
+     },
+     remove: ['oldField']
+   });
+   ```
+
+4. Delete Item
+   ```typescript
+   // Type-safe delete operation
+   const result = await UserEntity.delete({
+     pk: 'USER#123',
+     sk: 'METADATA'
+   });
+   ```
+
+## Query Operations
+1. Query with Key Conditions
+   ```typescript
+   // Type-safe query operation
+   const orders = await OrderEntity.query({
+     keyCondition: {
+       pk: 'USER#123',
+       sk: { beginsWith: 'ORDER#' }
+     },
+     filter: {
+       status: 'PENDING'
+     }
+   });
+   ```
+
+2. Scan with Filters
+   ```typescript
+   // Type-safe scan operation
+   const users = await UserEntity.scan({
+     filter: {
+       type: 'USER',
+       age: { gt: 18 }
+     }
+   });
+   ```
+
+## Expression Support
+1. Update Expressions
+   ```typescript
+   // Type-safe update with expressions
+   const result = await UserEntity.update({
+     key: {
+       pk: 'USER#123',
+       sk: 'METADATA'
+     },
+     set: {
+       name: 'John',
+       age: 30
+     },
+     add: {
+       points: 10
+     },
+     remove: ['oldField'],
+     condition: 'attribute_exists(pk)'
+   });
+   ```
+
+2. Condition Expressions
+   ```typescript
+   // Type-safe put with conditions
+   const result = await UserEntity.put({
+     pk: 'USER#123',
+     sk: 'METADATA',
+     type: 'USER',
+     name: 'John'
+   }, {
+     condition: 'attribute_not_exists(pk)'
+   });
+   ```
+
+## Batch Operations
+1. Batch Get
+   ```typescript
+   // Type-safe batch get
+   const results = await UserEntity.batchGet([
+     { pk: 'USER#1', sk: 'METADATA' },
+     { pk: 'USER#2', sk: 'METADATA' }
+   ]);
+   ```
+
+2. Batch Write
+   ```typescript
+   // Type-safe batch write
+   const results = await UserEntity.batchWrite({
+     put: [
+       {
+         pk: 'USER#1',
+         sk: 'METADATA',
+         type: 'USER',
+         name: 'John'
+       },
+       {
+         pk: 'USER#2',
+         sk: 'METADATA',
+         type: 'USER',
+         name: 'Jane'
+       }
+     ],
+     delete: [
+       { pk: 'USER#3', sk: 'METADATA' }
+     ]
+   });
+   ```
+
+## Transactions
+```typescript
+// Type-safe transaction
+const result = await db.transaction()
+  .put(UserEntity, {
+    pk: 'USER#123',
+    sk: 'METADATA',
+    type: 'USER',
+    name: 'John'
+  })
+  .put(OrderEntity, {
+    pk: 'USER#123',
+    sk: 'ORDER#456',
+    type: 'ORDER',
+    orderId: '456',
+    userId: '123',
+    amount: 100
+  })
+  .commit();
+```
+
+## Error Handling
+1. Schema Validation Errors
+   ```typescript
+   try {
+     const result = await UserEntity.put({
+       pk: 'USER#123',
+       sk: 'METADATA',
+       type: 'USER',
+       email: 'invalid-email' // Will fail Zod validation
+     });
+   } catch (error) {
+     if (error instanceof ZodError) {
+       // Handle schema validation error
+     }
+   }
+   ```
+
+2. DynamoDB Errors
+   ```typescript
+   try {
+     const result = await UserEntity.put(invalidData);
+   } catch (error) {
+     if (error instanceof ConditionalCheckFailedError) {
+       // Handle conditional check failure
+     } else if (error instanceof DynamoDBError) {
+       // Handle other DynamoDB errors
+     }
+   }
+   ```
+
+## Type Safety
+1. Schema Inference
+   ```typescript
+   // Infer types from schemas
+   type User = z.infer<typeof userSchema>;
+   type Order = z.infer<typeof orderSchema>;
+
+   // Use in operations
+   const user: User = {
+     pk: 'USER#123',
+     sk: 'METADATA',
+     type: 'USER',
+     name: 'John',
+     email: 'john@example.com'
+   };
+
+   await UserEntity.put(user);
+   ```
+
+2. Operation Types
+   ```typescript
+   // Type-safe query parameters
+   type QueryParams = {
+     keyCondition: {
+       pk: string;
+       sk: { beginsWith: string } | string;
+     };
+     filter?: Record<string, any>;
+   };
+
+   const params: QueryParams = {
+     keyCondition: {
+       pk: 'USER#123',
+       sk: { beginsWith: 'ORDER#' }
+     }
+   };
+
+   const orders = await OrderEntity.query(params);
+   ```
+
+## Query Conditions
+1. Support all DynamoDB comparison operators
+2. Chain multiple conditions
+3. Support for complex expressions
+
+```typescript
+const result = await db
+  .select()
+  .from(users)
+  .where(
+    and(
+      eq(users.status, 'active'),
+      gt(users.age, 18),
+      beginsWith(users.email, 'test')
+    )
+  );
+```
+
+## Index Usage
+1. Support for GSI and LSI
+2. Automatic index selection
+3. Manual index specification
+
+```typescript
+const result = await db
+  .select()
+  .from(users)
+  .where(eq(users.email, 'test@example.com'))
+  .index('email-index');
+```

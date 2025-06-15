@@ -1,0 +1,208 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Entity Definitions with Zod
+
+## Entity Structure
+1. Use Zod schemas as the primary definition method
+2. Support single-table design patterns
+3. Type-safe entity definitions
+
+## Entity Definition Pattern
+```typescript
+import { z } from 'zod';
+import { createEntity } from '@/dynojs';
+
+// Base schema for all entities
+const baseSchema = z.object({
+  pk: z.string(),
+  sk: z.string(),
+  type: z.string(),
+  createdAt: z.date(),
+  updatedAt: z.date()
+});
+
+// User entity schema
+const userSchema = baseSchema.extend({
+  type: z.literal('USER'),
+  name: z.string(),
+  email: z.string().email(),
+  age: z.number().optional(),
+  tags: z.set(z.string()).optional()
+});
+
+// Create entity using Zod schema
+const UserEntity = createEntity({
+  name: 'users',
+  schema: userSchema,
+  indexes: {
+    email: {
+      pk: 'email',
+      sk: 'type'
+    }
+  }
+});
+
+// Order entity schema
+const orderSchema = baseSchema.extend({
+  type: z.literal('ORDER'),
+  orderId: z.string(),
+  userId: z.string(),
+  amount: z.number(),
+  status: z.enum(['PENDING', 'COMPLETED', 'CANCELLED'])
+});
+
+// Create order entity
+const OrderEntity = createEntity({
+  name: 'orders',
+  schema: orderSchema,
+  indexes: {
+    userOrders: {
+      pk: 'userId',
+      sk: 'type'
+    }
+  }
+});
+```
+
+## Single-Table Design Patterns
+1. Entity Type Discrimination
+   ```typescript
+   // Define polymorphic schema
+   const itemSchema = z.discriminatedUnion('type', [
+     userSchema,
+     orderSchema
+   ]);
+
+   // Create entity with polymorphic schema
+   const ItemEntity = createEntity({
+     name: 'items',
+     schema: itemSchema
+   });
+   ```
+
+2. Composite Keys
+   ```typescript
+   // Define schema with composite key pattern
+   const userOrderSchema = baseSchema.extend({
+     type: z.literal('USER_ORDER'),
+     userId: z.string(),
+     orderId: z.string(),
+     // Computed fields for keys
+     pk: z.string().transform(
+       (val, ctx) => `USER#${ctx.parent.userId}`
+     ),
+     sk: z.string().transform(
+       (val, ctx) => `ORDER#${ctx.parent.orderId}`
+     )
+   });
+   ```
+
+3. Hierarchical Data
+   ```typescript
+   // Define schema for hierarchical data
+   const categorySchema = baseSchema.extend({
+     type: z.literal('CATEGORY'),
+     categoryId: z.string(),
+     parentId: z.string().optional(),
+     name: z.string(),
+     // Computed fields for hierarchical keys
+     pk: z.string().transform(
+       (val, ctx) => `CATEGORY#${ctx.parent.categoryId}`
+     ),
+     sk: z.string().transform(
+       (val, ctx) => ctx.parent.parentId 
+         ? `PARENT#${ctx.parent.parentId}`
+         : 'ROOT'
+     )
+   });
+   ```
+
+## Entity Relationships
+1. One-to-One
+   ```typescript
+   // Define profile schema
+   const profileSchema = baseSchema.extend({
+     type: z.literal('PROFILE'),
+     userId: z.string(),
+     // Computed fields for relationship
+     pk: z.string().transform(
+       (val, ctx) => `USER#${ctx.parent.userId}`
+     ),
+     sk: z.string().transform(() => 'PROFILE')
+   });
+   ```
+
+2. One-to-Many
+   ```typescript
+   // Define order items schema
+   const orderItemSchema = baseSchema.extend({
+     type: z.literal('ORDER_ITEM'),
+     orderId: z.string(),
+     itemId: z.string(),
+     // Computed fields for relationship
+     pk: z.string().transform(
+       (val, ctx) => `ORDER#${ctx.parent.orderId}`
+     ),
+     sk: z.string().transform(
+       (val, ctx) => `ITEM#${ctx.parent.itemId}`
+     )
+   });
+   ```
+
+## Schema Composition
+```typescript
+// Define reusable address schema
+const addressSchema = z.object({
+  street: z.string(),
+  city: z.string(),
+  country: z.string()
+});
+
+// Use in user schema
+const userWithAddressSchema = userSchema.extend({
+  address: addressSchema
+});
+
+// Use in order schema
+const orderWithAddressSchema = orderSchema.extend({
+  shippingAddress: addressSchema,
+  billingAddress: addressSchema
+});
+```
+
+## Type Safety
+```typescript
+// Infer types from schemas
+type User = z.infer<typeof userSchema>;
+type Order = z.infer<typeof orderSchema>;
+
+// Use in entity operations
+const user: User = {
+  pk: 'USER#123',
+  sk: 'METADATA',
+  type: 'USER',
+  name: 'John',
+  email: 'john@example.com'
+};
+
+await UserEntity.put(user);
+```
+
+## Best Practices
+1. Schema Organization
+   - Use base schemas for common fields
+   - Extend schemas for specific entities
+   - Keep schemas modular and reusable
+
+2. Key Design
+   - Use computed fields for key generation
+   - Follow consistent key patterns
+   - Consider access patterns
+
+3. Type Safety
+   - Use strict mode for better type inference
+   - Define proper types for all fields
+   - Use discriminated unions for polymorphic types

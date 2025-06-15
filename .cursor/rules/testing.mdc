@@ -1,0 +1,306 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Testing Guidelines
+
+## Core Principles
+1. Use Vitest for testing (Vite's native test runner)
+2. Aim for 100% coverage
+3. Write self-contained, concise tests
+4. Follow AAA pattern (Arrange, Act, Assert)
+
+## Test Structure
+1. Test File Organization
+   ```typescript
+   // src/entities/__tests__/user.test.ts
+   import { describe, it, expect, beforeEach } from 'vitest';
+   import { UserEntity, userSchema } from '../user';
+   import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+   import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+
+   describe('UserEntity', () => {
+     let client: DynamoDBDocumentClient;
+     
+     beforeEach(() => {
+       // Mock DynamoDB client
+       client = new DynamoDBDocumentClient({
+         marshallOptions: { removeUndefinedValues: true },
+         client: new DynamoDBClient({})
+       });
+     });
+
+     it('should validate user schema', () => {
+       const validUser = {
+         pk: 'USER#123',
+         sk: 'METADATA',
+         type: 'USER',
+         name: 'John',
+         email: 'john@example.com',
+         createdAt: new Date(),
+         updatedAt: new Date()
+       };
+
+       expect(() => userSchema.parse(validUser)).not.toThrow();
+     });
+
+     it('should reject invalid user data', () => {
+       const invalidUser = {
+         pk: 'USER#123',
+         sk: 'METADATA',
+         type: 'USER',
+         name: 'John',
+         email: 'invalid-email', // Invalid email
+         createdAt: new Date(),
+         updatedAt: new Date()
+       };
+
+       expect(() => userSchema.parse(invalidUser)).toThrow();
+     });
+   });
+   ```
+
+2. Schema Testing
+   ```typescript
+   // src/schema/__tests__/base-schema.test.ts
+   import { describe, it, expect } from 'vitest';
+   import { baseSchema } from '../base-schema';
+
+   describe('BaseSchema', () => {
+     it('should validate required fields', () => {
+       const validData = {
+         pk: 'TEST#123',
+         sk: 'METADATA',
+         type: 'TEST',
+         createdAt: new Date(),
+         updatedAt: new Date()
+       };
+
+       expect(() => baseSchema.parse(validData)).not.toThrow();
+     });
+
+     it('should reject missing required fields', () => {
+       const invalidData = {
+         pk: 'TEST#123',
+         sk: 'METADATA',
+         // Missing type, createdAt, updatedAt
+       };
+
+       expect(() => baseSchema.parse(invalidData)).toThrow();
+     });
+   });
+   ```
+
+3. Entity Operations Testing
+   ```typescript
+   // src/entities/__tests__/order.test.ts
+   import { describe, it, expect, vi, beforeEach } from 'vitest';
+   import { OrderEntity } from '../order';
+   import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+   import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+
+   describe('OrderEntity', () => {
+     let client: DynamoDBDocumentClient;
+     let mockSend: any;
+
+     beforeEach(() => {
+       mockSend = vi.fn();
+       client = new DynamoDBDocumentClient({
+         marshallOptions: { removeUndefinedValues: true },
+         client: new DynamoDBClient({})
+       });
+       vi.spyOn(client, 'send').mockImplementation(mockSend);
+     });
+
+     it('should create order', async () => {
+       const order = {
+         pk: 'USER#123',
+         sk: 'ORDER#456',
+         type: 'ORDER',
+         orderId: '456',
+         userId: '123',
+         amount: 100,
+         status: 'PENDING',
+         createdAt: new Date(),
+         updatedAt: new Date()
+       };
+
+       mockSend.mockResolvedValueOnce({});
+       await OrderEntity.put(order);
+
+       expect(mockSend).toHaveBeenCalledWith(
+         expect.objectContaining({
+           input: expect.objectContaining({
+             TableName: 'my-table',
+             Item: expect.objectContaining({
+               pk: 'USER#123',
+               sk: 'ORDER#456'
+             })
+           })
+         })
+       );
+     });
+   });
+   ```
+
+## Coverage Requirements
+1. Schema Validation
+   - Test all field validations
+   - Test optional fields
+   - Test custom validators
+   - Test error messages
+
+2. Entity Operations
+   - Test CRUD operations
+   - Test query operations
+   - Test batch operations
+   - Test error handling
+
+3. Index Management
+   - Test GSI operations
+   - Test LSI operations
+   - Test key transformations
+
+## Test Configuration
+```typescript
+// vitest.config.ts
+import { defineConfig } from 'vitest/config';
+import { resolve } from 'path';
+
+export default defineConfig({
+  test: {
+    globals: true,
+    environment: 'node',
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      exclude: [
+        'node_modules/',
+        'dist/',
+        '**/*.d.ts',
+        '**/*.test.ts',
+        '**/*.config.ts',
+        '**/types.ts'
+      ],
+      all: true,
+      branches: 100,
+      functions: 100,
+      lines: 100,
+      statements: 100
+    }
+  },
+  resolve: {
+    alias: {
+      '@': resolve(__dirname, './src')
+    }
+  }
+});
+```
+
+## Best Practices
+1. Test Organization
+   - Group related tests
+   - Use descriptive test names
+   - Keep tests focused and concise
+   - Use beforeEach for setup
+
+2. Mocking
+   - Mock external dependencies
+   - Use vi.spyOn for method spies
+   - Mock AWS SDK responses
+   - Reset mocks between tests
+
+3. Assertions
+   - Use specific assertions
+   - Test both success and failure cases
+   - Verify error messages
+   - Check side effects
+
+4. Performance
+   - Use test.each for similar tests
+   - Avoid unnecessary setup
+   - Clean up resources
+   - Use appropriate timeouts
+
+## Example Test Suite
+```typescript
+// src/query/__tests__/query-builder.test.ts
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { QueryBuilder } from '../query-builder';
+import { UserEntity } from '../../entities/user';
+
+describe('QueryBuilder', () => {
+  let queryBuilder: QueryBuilder;
+  let mockSend: any;
+
+  beforeEach(() => {
+    mockSend = vi.fn();
+    queryBuilder = new QueryBuilder({
+      table: 'my-table',
+      client: {
+        send: mockSend
+      }
+    });
+  });
+
+  describe('query', () => {
+    it('should build query with key conditions', async () => {
+      mockSend.mockResolvedValueOnce({
+        Items: [{
+          pk: 'USER#123',
+          sk: 'METADATA',
+          type: 'USER',
+          name: 'John'
+        }]
+      });
+
+      const result = await queryBuilder
+        .from(UserEntity)
+        .where({
+          pk: 'USER#123',
+          sk: { beginsWith: 'METADATA' }
+        })
+        .execute();
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        pk: 'USER#123',
+        sk: 'METADATA',
+        type: 'USER',
+        name: 'John'
+      });
+    });
+
+    it('should handle empty results', async () => {
+      mockSend.mockResolvedValueOnce({
+        Items: []
+      });
+
+      const result = await queryBuilder
+        .from(UserEntity)
+        .where({
+          pk: 'USER#999',
+          sk: 'METADATA'
+        })
+        .execute();
+
+      expect(result).toHaveLength(0);
+    });
+
+    it('should handle query errors', async () => {
+      mockSend.mockRejectedValueOnce(new Error('Query failed'));
+
+      await expect(
+        queryBuilder
+          .from(UserEntity)
+          .where({
+            pk: 'USER#123',
+            sk: 'METADATA'
+          })
+          .execute()
+      ).rejects.toThrow('Query failed');
+    });
+  });
+});
+```

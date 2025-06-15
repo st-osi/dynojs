@@ -1,0 +1,209 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Zod Schema Integration
+
+## Core Principles
+1. Use Zod schemas as the single source of truth
+2. Map Zod types to DynamoDB types
+3. Support all DynamoDB Toolbox features through Zod
+
+## Schema Definition
+```typescript
+import { z } from 'zod';
+import { createEntity } from '../dynojs';
+
+// Define base schema for all entities
+const baseSchema = z.object({
+  pk: z.string(),
+  sk: z.string(),
+  type: z.string(),
+  createdAt: z.date(),
+  updatedAt: z.date()
+});
+
+// Define user schema extending base
+const userSchema = baseSchema.extend({
+  type: z.literal('USER'),
+  name: z.string(),
+  email: z.string().email(),
+  age: z.number().optional(),
+  tags: z.set(z.string()).optional(),
+  metadata: z.record(z.any()).optional()
+});
+
+// Create entity using Zod schema
+const UserEntity = createEntity({
+  name: 'users',
+  schema: userSchema,
+  // Define indexes using schema fields
+  indexes: {
+    email: {
+      pk: 'email',
+      sk: 'type'
+    },
+    age: {
+      pk: 'pk',
+      sk: 'age'
+    }
+  }
+});
+```
+
+## DynamoDB Type Mapping
+```typescript
+// Scalar Types
+const scalarSchema = z.object({
+  // String (S)
+  name: z.string(),
+  
+  // Number (N)
+  age: z.number(),
+  
+  // Binary (B)
+  data: z.instanceof(Buffer),
+  
+  // Boolean (BOOL)
+  isActive: z.boolean(),
+  
+  // Null (NULL)
+  optionalField: z.null().optional()
+});
+
+// Set Types
+const setSchema = z.object({
+  // String Set (SS)
+  tags: z.set(z.string()),
+  
+  // Number Set (NS)
+  scores: z.set(z.number()),
+  
+  // Binary Set (BS)
+  dataSets: z.set(z.instanceof(Buffer))
+});
+
+// Document Types
+const documentSchema = z.object({
+  // Map (M)
+  metadata: z.record(z.any()),
+  
+  // List (L)
+  items: z.array(z.any())
+});
+```
+
+## Complex Schema Patterns
+```typescript
+// Polymorphic Types
+const itemSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('USER'),
+    name: z.string(),
+    email: z.string()
+  }),
+  z.object({
+    type: z.literal('ORDER'),
+    orderId: z.string(),
+    amount: z.number()
+  })
+]);
+
+// Nested Objects
+const nestedSchema = z.object({
+  address: z.object({
+    street: z.string(),
+    city: z.string(),
+    country: z.string()
+  }),
+  preferences: z.object({
+    theme: z.string(),
+    notifications: z.boolean()
+  })
+});
+
+// Computed Fields
+const computedSchema = z.object({
+  firstName: z.string(),
+  lastName: z.string(),
+  fullName: z.string().transform(
+    (val, ctx) => `${ctx.parent.firstName} ${ctx.parent.lastName}`
+  )
+});
+```
+
+## Index Definitions
+```typescript
+// Define indexes using schema fields
+const UserEntity = createEntity({
+  name: 'users',
+  schema: userSchema,
+  indexes: {
+    // GSI
+    email: {
+      pk: 'email',
+      sk: 'type'
+    },
+    // LSI
+    age: {
+      pk: 'pk',
+      sk: 'age'
+    }
+  }
+});
+```
+
+## Validation and Type Safety
+```typescript
+// Runtime validation
+const result = await UserEntity.put({
+  pk: 'USER#123',
+  sk: 'METADATA',
+  type: 'USER',
+  name: 'John',
+  email: 'invalid-email' // Will fail validation
+});
+
+// Type inference
+type User = z.infer<typeof userSchema>;
+const user: User = {
+  pk: 'USER#123',
+  sk: 'METADATA',
+  type: 'USER',
+  name: 'John',
+  email: 'john@example.com'
+};
+```
+
+## Limitations and Considerations
+1. Schema Complexity
+   - Zod can handle most DynamoDB data types
+   - Complex nested structures may need custom transformers
+   - Some DynamoDB-specific features may need additional configuration
+
+2. Index Management
+   - Index definitions still need to be specified separately
+   - Schema fields used in indexes must be properly typed
+   - Composite keys may need custom validation
+
+3. Performance
+   - Complex Zod schemas may impact validation performance
+   - Consider using `.strict()` for better type inference
+   - Use `.passthrough()` for flexible schemas
+
+## Best Practices
+1. Schema Organization
+   - Use base schemas for common fields
+   - Extend schemas for specific entities
+   - Keep schemas modular and reusable
+
+2. Type Safety
+   - Use strict mode for better type inference
+   - Define proper types for all fields
+   - Use discriminated unions for polymorphic types
+
+3. Validation
+   - Add custom validators for business rules
+   - Use transformers for computed fields
+   - Handle edge cases explicitly

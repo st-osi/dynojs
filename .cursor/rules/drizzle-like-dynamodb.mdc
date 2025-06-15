@@ -1,0 +1,201 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Drizzle-like DynamoDB Implementation
+
+## Core Principles
+1. Use Zod as the primary schema definition method
+2. Implement Drizzle-like query builder API
+3. Use AWS DynamoDB Document Client for underlying operations
+4. Support single-table design patterns
+
+## Key Components
+1. Schema Definition with Zod
+   ```typescript
+   // Base schema for all entities
+   const baseSchema = z.object({
+     pk: z.string(),
+     sk: z.string(),
+     type: z.string(),
+     createdAt: z.date(),
+     updatedAt: z.date()
+   });
+
+   // User schema extending base schema
+   const userSchema = baseSchema.extend({
+     type: z.literal('USER'),
+     name: z.string(),
+     email: z.string().email(),
+     age: z.number().optional()
+   });
+
+   // Create entity from schema
+   const UserEntity = createEntity({
+     schema: userSchema,
+     table: 'my-table',
+     indexes: {
+       gsi1: {
+         pk: 'EMAIL',
+         sk: 'email'
+       }
+     }
+   });
+   ```
+
+2. Query Builder
+   ```typescript
+   // Type-safe query operations
+   const user = await UserEntity.get({
+     pk: 'USER#123',
+     sk: 'METADATA'
+   });
+
+   // Chainable query builder
+   const orders = await OrderEntity.query({
+     keyCondition: {
+       pk: 'USER#123',
+       sk: { beginsWith: 'ORDER#' }
+     },
+     filter: {
+       status: 'PENDING'
+     }
+   });
+   ```
+
+3. Type Safety
+   ```typescript
+   // Infer types from Zod schemas
+   type User = z.infer<typeof userSchema>;
+   type Order = z.infer<typeof orderSchema>;
+
+   // Type-safe operations
+   const newUser: User = {
+     pk: 'USER#123',
+     sk: 'METADATA',
+     type: 'USER',
+     name: 'John',
+     email: 'john@example.com',
+     createdAt: new Date(),
+     updatedAt: new Date()
+   };
+
+   await UserEntity.put(newUser);
+   ```
+
+## Implementation Guidelines
+1. Schema Definition
+   - Use Zod for all schema definitions
+   - Support schema composition and inheritance
+   - Define indexes and relationships in schema
+   - Handle DynamoDB-specific types
+
+2. Query Operations
+   - Implement type-safe CRUD operations
+   - Support complex queries and filters
+   - Handle batch operations and transactions
+   - Provide expression support
+
+3. Type Safety
+   - Infer types from Zod schemas
+   - Validate data at runtime
+   - Provide type hints for operations
+   - Handle schema evolution
+
+4. Best Practices
+   - Use single-table design patterns
+   - Implement proper error handling
+   - Support schema migrations
+   - Optimize for DynamoDB performance
+
+## Example Usage
+```typescript
+// Define schemas
+const orderSchema = baseSchema.extend({
+  type: z.literal('ORDER'),
+  orderId: z.string(),
+  userId: z.string(),
+  amount: z.number(),
+  status: z.enum(['PENDING', 'COMPLETED', 'CANCELLED'])
+});
+
+// Create entity
+const OrderEntity = createEntity({
+  schema: orderSchema,
+  table: 'my-table',
+  indexes: {
+    gsi1: {
+      pk: 'USER',
+      sk: 'orderId'
+    }
+  }
+});
+
+// Type-safe operations
+const order: z.infer<typeof orderSchema> = {
+  pk: 'USER#123',
+  sk: 'ORDER#456',
+  type: 'ORDER',
+  orderId: '456',
+  userId: '123',
+  amount: 100,
+  status: 'PENDING',
+  createdAt: new Date(),
+  updatedAt: new Date()
+};
+
+// Create order
+await OrderEntity.put(order);
+
+// Query orders
+const userOrders = await OrderEntity.query({
+  keyCondition: {
+    pk: 'USER#123',
+    sk: { beginsWith: 'ORDER#' }
+  }
+});
+```
+
+## Error Handling
+```typescript
+try {
+  const result = await UserEntity.put({
+    pk: 'USER#123',
+    sk: 'METADATA',
+    type: 'USER',
+    email: 'invalid-email' // Will fail Zod validation
+  });
+} catch (error) {
+  if (error instanceof ZodError) {
+    // Handle schema validation error
+  } else if (error instanceof DynamoDBError) {
+    // Handle DynamoDB error
+  }
+}
+```
+
+## Schema Evolution
+```typescript
+// Version schemas for migrations
+const userSchemaV1 = baseSchema.extend({
+  type: z.literal('USER'),
+  name: z.string(),
+  email: z.string().email()
+});
+
+const userSchemaV2 = userSchemaV1.extend({
+  age: z.number().optional(),
+  address: z.object({
+    street: z.string(),
+    city: z.string()
+  }).optional()
+});
+
+// Handle schema versioning
+const UserEntity = createEntity({
+  schema: userSchemaV2,
+  table: 'my-table',
+  version: 2
+});
+```
