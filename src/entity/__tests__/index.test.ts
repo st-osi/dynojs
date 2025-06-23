@@ -78,8 +78,13 @@ describe("Index Management", () => {
       expect(mockSend).toHaveBeenCalledWith(
         expect.objectContaining({
           input: expect.objectContaining({
+            TableName: "test-table",
             IndexName: "emailIndex",
-            KeyConditionExpression: expect.stringContaining("email"),
+            KeyConditionExpression: "email = :email AND type = :type",
+            ExpressionAttributeValues: {
+              ":email": "test@example.com",
+              ":type": "USER",
+            },
           }),
         })
       );
@@ -112,7 +117,12 @@ describe("Index Management", () => {
       expect(mockSend).toHaveBeenCalledWith(
         expect.objectContaining({
           input: expect.objectContaining({
+            TableName: "test-table",
             IndexName: "statusIndex",
+            FilterExpression: "status = :status",
+            ExpressionAttributeValues: {
+              ":status": "ACTIVE",
+            },
           }),
         })
       );
@@ -169,8 +179,13 @@ describe("Index Management", () => {
       expect(mockSend).toHaveBeenCalledWith(
         expect.objectContaining({
           input: expect.objectContaining({
+            TableName: "test-table",
             IndexName: "statusIndex",
-            KeyConditionExpression: expect.stringContaining("pk"),
+            KeyConditionExpression: "pk = :pk AND status = :status",
+            ExpressionAttributeValues: {
+              ":pk": "ORDER#1",
+              ":status": "ACTIVE",
+            },
           }),
         })
       );
@@ -204,8 +219,14 @@ describe("Index Management", () => {
       expect(mockSend).toHaveBeenCalledWith(
         expect.objectContaining({
           input: expect.objectContaining({
+            TableName: "test-table",
             IndexName: "createdAtIndex",
-            KeyConditionExpression: expect.stringContaining("begins_with"),
+            KeyConditionExpression:
+              "pk = :pk AND begins_with(createdAt, :createdAt)",
+            ExpressionAttributeValues: {
+              ":pk": "ORDER#1",
+              ":createdAt": "2024",
+            },
           }),
         })
       );
@@ -262,8 +283,14 @@ describe("Index Management", () => {
       expect(mockSend).toHaveBeenCalledWith(
         expect.objectContaining({
           input: expect.objectContaining({
+            TableName: "test-table",
             IndexName: "statusCategoryIndex",
-            KeyConditionExpression: expect.stringContaining("begins_with"),
+            KeyConditionExpression:
+              "status = :status AND begins_with(category, :category)",
+            ExpressionAttributeValues: {
+              ":status": "ACTIVE",
+              ":category": "ELEC",
+            },
           }),
         })
       );
@@ -297,8 +324,15 @@ describe("Index Management", () => {
       expect(mockSend).toHaveBeenCalledWith(
         expect.objectContaining({
           input: expect.objectContaining({
+            TableName: "test-table",
             IndexName: "categoryIndex",
-            KeyConditionExpression: expect.stringContaining("between"),
+            KeyConditionExpression:
+              "category = :category AND price BETWEEN :priceStart AND :priceEnd",
+            ExpressionAttributeValues: {
+              ":category": "ELECTRONICS",
+              ":priceStart": "100",
+              ":priceEnd": "1000",
+            },
           }),
         })
       );

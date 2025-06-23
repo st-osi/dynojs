@@ -10,7 +10,14 @@ import {
   BatchWriteCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { z } from "zod";
-import type { Entity, EntityConfig, QueryOptions } from "./types";
+import type {
+  BatchGetOptions,
+  BatchWriteOptions,
+  Entity,
+  EntityConfig,
+  QueryOptions,
+  IndexConfig,
+} from "./types";
 
 export function createEntity<T>(config: EntityConfig<T>): Entity<T> {
   return new EntityImpl(config);
@@ -103,16 +110,26 @@ class EntityImpl<T> implements Entity<T> {
   }
 
   async query(options: QueryOptions): Promise<T[]> {
-    const { keyCondition, filter, limit, scanIndexForward } = options;
+    const { keyCondition, filter, limit, scanIndexForward, index } = options;
+
+    const indexConfig = index ? this.indexes?.[index] : undefined;
+    const expressionAttributeValues = this.buildExpressionAttributeValues(
+      keyCondition,
+      filter,
+      indexConfig
+    );
 
     const command = new QueryCommand({
       TableName: this.table,
-      KeyConditionExpression: this.buildKeyConditionExpression(keyCondition),
-      FilterExpression: filter ? this.buildFilterExpression(filter) : undefined,
-      ExpressionAttributeValues: this.buildExpressionAttributeValues(
+      IndexName: index,
+      KeyConditionExpression: this.buildKeyConditionExpression(
         keyCondition,
-        filter
+        indexConfig
       ),
+      FilterExpression: filter ? this.buildFilterExpression(filter) : undefined,
+      ...(Object.keys(expressionAttributeValues).length > 0 && {
+        ExpressionAttributeValues: expressionAttributeValues,
+      }),
       Limit: limit,
       ScanIndexForward: scanIndexForward,
     });
@@ -122,14 +139,22 @@ class EntityImpl<T> implements Entity<T> {
   }
 
   async scan(options?: Omit<QueryOptions, "keyCondition">): Promise<T[]> {
-    const { filter, limit } = options || {};
+    const { filter, limit, index } = options || {};
+
+    const indexConfig = index ? this.indexes?.[index] : undefined;
+    const expressionAttributeValues = this.buildExpressionAttributeValues(
+      undefined,
+      filter,
+      indexConfig
+    );
 
     const command = new ScanCommand({
       TableName: this.table,
+      IndexName: index,
       FilterExpression: filter ? this.buildFilterExpression(filter) : undefined,
-      ExpressionAttributeValues: filter
-        ? this.buildExpressionAttributeValues(undefined, filter)
-        : undefined,
+      ...(Object.keys(expressionAttributeValues).length > 0 && {
+        ExpressionAttributeValues: expressionAttributeValues,
+      }),
       Limit: limit,
     });
 
@@ -137,7 +162,9 @@ class EntityImpl<T> implements Entity<T> {
     return (response.Items || []).map((item) => this.schema.parse(item));
   }
 
-  async batchGet(keys: { pk: string; sk: string }[]): Promise<T[]> {
+  async batchGet(options: BatchGetOptions): Promise<T[]> {
+    const { keys } = options;
+
     const command = new BatchGetCommand({
       RequestItems: {
         [this.table]: {
@@ -147,20 +174,20 @@ class EntityImpl<T> implements Entity<T> {
     });
 
     const response = await this.documentClient.send(command);
-    return (response.Responses?.[this.table] || []).map((item) =>
+    const result = (response.Responses?.[this.table] || []).map((item) =>
       this.schema.parse(item)
     );
+    return result;
   }
 
-  async batchWrite(items: {
-    put?: T[];
-    delete?: { pk: string; sk: string }[];
-  }): Promise<void> {
+  async batchWrite(options: BatchWriteOptions): Promise<void> {
+    const { put, delete: deleteItems, index } = options;
+
     const requestItems: Record<string, any>[] = [];
 
-    if (items.put) {
+    if (put) {
       requestItems.push(
-        ...items.put.map((item) => ({
+        ...put.map((item) => ({
           PutRequest: {
             Item: this.schema.parse(item),
           },
@@ -168,9 +195,9 @@ class EntityImpl<T> implements Entity<T> {
       );
     }
 
-    if (items.delete) {
+    if (deleteItems) {
       requestItems.push(
-        ...items.delete.map((key) => ({
+        ...deleteItems.map((key) => ({
           DeleteRequest: {
             Key: key,
           },
@@ -188,20 +215,39 @@ class EntityImpl<T> implements Entity<T> {
   }
 
   private buildKeyConditionExpression(
-    keyCondition?: QueryOptions["keyCondition"]
+    keyCondition?: QueryOptions["keyCondition"],
+    indexConfig?: IndexConfig
   ): string | undefined {
     if (!keyCondition) return undefined;
 
     const conditions: string[] = [];
-    conditions.push("pk = :pk");
 
-    if (keyCondition.sk) {
-      if (typeof keyCondition.sk === "string") {
-        conditions.push("sk = :sk");
-      } else if ("beginsWith" in keyCondition.sk) {
-        conditions.push("begins_with(sk, :sk)");
-      } else if ("between" in keyCondition.sk) {
-        conditions.push("sk BETWEEN :skStart AND :skEnd");
+    // Use index field names if available, otherwise default to pk/sk
+    const pkField = indexConfig?.pk || "pk";
+    const skField = indexConfig?.sk || "sk";
+
+    if (keyCondition[pkField]) {
+      conditions.push(`${pkField} = :${pkField}`);
+    }
+
+    if (keyCondition[skField]) {
+      const skValue = keyCondition[skField];
+      if (typeof skValue === "string") {
+        conditions.push(`${skField} = :${skField}`);
+      } else if (
+        skValue &&
+        typeof skValue === "object" &&
+        "beginsWith" in skValue
+      ) {
+        conditions.push(`begins_with(${skField}, :${skField})`);
+      } else if (
+        skValue &&
+        typeof skValue === "object" &&
+        "between" in skValue
+      ) {
+        conditions.push(
+          `${skField} BETWEEN :${skField}Start AND :${skField}End`
+        );
       }
     }
 
@@ -230,21 +276,37 @@ class EntityImpl<T> implements Entity<T> {
 
   private buildExpressionAttributeValues(
     keyCondition?: QueryOptions["keyCondition"],
-    filter?: Record<string, any>
-  ): Record<string, any> | undefined {
+    filter?: Record<string, any>,
+    indexConfig?: IndexConfig
+  ): Record<string, any> {
     const values: Record<string, any> = {};
 
     if (keyCondition) {
-      values[":pk"] = keyCondition.pk;
+      // Use index field names if available, otherwise default to pk/sk
+      const pkField = indexConfig?.pk || "pk";
+      const skField = indexConfig?.sk || "sk";
 
-      if (keyCondition.sk) {
-        if (typeof keyCondition.sk === "string") {
-          values[":sk"] = keyCondition.sk;
-        } else if ("beginsWith" in keyCondition.sk) {
-          values[":sk"] = keyCondition.sk.beginsWith;
-        } else if ("between" in keyCondition.sk) {
-          values[":skStart"] = keyCondition.sk.between[0];
-          values[":skEnd"] = keyCondition.sk.between[1];
+      if (keyCondition[pkField]) {
+        values[`:${pkField}`] = keyCondition[pkField];
+      }
+
+      if (keyCondition[skField]) {
+        const skValue = keyCondition[skField];
+        if (typeof skValue === "string") {
+          values[`:${skField}`] = skValue;
+        } else if (
+          skValue &&
+          typeof skValue === "object" &&
+          "beginsWith" in skValue
+        ) {
+          values[`:${skField}`] = skValue.beginsWith;
+        } else if (
+          skValue &&
+          typeof skValue === "object" &&
+          "between" in skValue
+        ) {
+          values[`:${skField}Start`] = skValue.between[0];
+          values[`:${skField}End`] = skValue.between[1];
         }
       }
     }
@@ -266,6 +328,6 @@ class EntityImpl<T> implements Entity<T> {
       });
     }
 
-    return Object.keys(values).length > 0 ? values : undefined;
+    return values;
   }
 }

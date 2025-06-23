@@ -191,7 +191,11 @@ describe("Entity", () => {
         expect.objectContaining({
           input: expect.objectContaining({
             TableName: "test-table",
-            KeyConditionExpression: expect.stringContaining("begins_with"),
+            KeyConditionExpression: "pk = :pk AND begins_with(sk, :sk)",
+            ExpressionAttributeValues: {
+              ":pk": "TEST#1",
+              ":sk": "ITEM#",
+            },
           }),
         })
       );
@@ -224,7 +228,49 @@ describe("Entity", () => {
       expect(mockSend).toHaveBeenCalledWith(
         expect.objectContaining({
           input: expect.objectContaining({
-            FilterExpression: expect.stringContaining("age"),
+            TableName: "test-table",
+            KeyConditionExpression: "pk = :pk AND begins_with(sk, :sk)",
+            FilterExpression: "age > :age",
+            ExpressionAttributeValues: {
+              ":pk": "TEST#1",
+              ":sk": "ITEM#",
+              ":age": 25,
+            },
+          }),
+        })
+      );
+    });
+
+    it("should query items with simple key condition", async () => {
+      const items = [
+        {
+          pk: "TEST#1",
+          sk: "METADATA",
+          type: "TEST",
+          name: "Item 1",
+          age: 30,
+        },
+      ];
+
+      mockSend.mockResolvedValueOnce({ Items: items });
+
+      const result = await entity.query({
+        keyCondition: {
+          pk: "TEST#1",
+          sk: "METADATA",
+        },
+      });
+
+      expect(result).toEqual(items);
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            TableName: "test-table",
+            KeyConditionExpression: "pk = :pk AND sk = :sk",
+            ExpressionAttributeValues: {
+              ":pk": "TEST#1",
+              ":sk": "METADATA",
+            },
           }),
         })
       );
@@ -286,7 +332,11 @@ describe("Entity", () => {
       expect(mockSend).toHaveBeenCalledWith(
         expect.objectContaining({
           input: expect.objectContaining({
-            FilterExpression: expect.stringContaining("age"),
+            TableName: "test-table",
+            FilterExpression: "age > :age",
+            ExpressionAttributeValues: {
+              ":age": 25,
+            },
           }),
         })
       );
@@ -324,7 +374,45 @@ describe("Entity", () => {
       });
 
       const result = await entity.batchGet({ keys });
+
       expect(result).toEqual(items);
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            RequestItems: {
+              "test-table": {
+                Keys: [
+                  {
+                    pk: "TEST#1",
+                    sk: "ITEM#1",
+                  },
+                  {
+                    pk: "TEST#1",
+                    sk: "ITEM#2",
+                  },
+                ],
+              },
+            },
+          }),
+        })
+      );
+    });
+
+    it("should handle empty responses", async () => {
+      const keys = [
+        { pk: "TEST#1", sk: "ITEM#1" },
+        { pk: "TEST#1", sk: "ITEM#2" },
+      ];
+
+      mockSend.mockResolvedValueOnce({
+        Responses: {
+          "test-table": [],
+        },
+      });
+
+      const result = await entity.batchGet({ keys });
+
+      expect(result).toEqual([]);
       expect(mockSend).toHaveBeenCalledWith(
         expect.objectContaining({
           input: expect.objectContaining({
@@ -335,6 +423,19 @@ describe("Entity", () => {
             },
           }),
         })
+      );
+    });
+
+    it("should handle batch get errors", async () => {
+      const keys = [
+        { pk: "TEST#1", sk: "ITEM#1" },
+        { pk: "TEST#1", sk: "ITEM#2" },
+      ];
+
+      mockSend.mockRejectedValueOnce(new Error("Batch get failed"));
+
+      await expect(entity.batchGet({ keys })).rejects.toThrow(
+        "Batch get failed"
       );
     });
   });
