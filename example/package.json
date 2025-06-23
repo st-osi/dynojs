@@ -1,0 +1,38 @@
+{
+  "name": "dynojs-example",
+  "version": "1.0.0",
+  "description": "DynoJS example with LocalStack and DynamoDB",
+  "main": "demo.ts",
+  "scripts": {
+    "start": "docker-compose up -d",
+    "stop": "docker-compose down",
+    "restart": "docker-compose restart",
+    "logs": "docker-compose logs -f",
+    "demo": "tsx demo.ts",
+    "demo:transactions": "tsx transactions.ts",
+    "demo:admin": "docker-compose --profile admin up -d",
+    "clean": "docker-compose down -v",
+    "dev:setup": "chmod +x init.sh && docker-compose up -d",
+    "test": "tsx demo.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.0.0",
+    "@aws-sdk/lib-dynamodb": "^3.0.0",
+    "zod": "^3.0.0",
+    "tsx": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "keywords": [
+    "dynamodb",
+    "localstack",
+    "typescript",
+    "zod",
+    "orm",
+    "example"
+  ],
+  "author": "DynoJS Team",
+  "license": "MIT"
+}
